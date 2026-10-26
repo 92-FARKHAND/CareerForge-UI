@@ -109,21 +109,23 @@ export default function ResumesPage() {
         <ul className="space-y-3">
           {resumes.map((resume) => (
             <li key={resume.id}>
-              <ResumeCard
-                resume={resume}
-                onDelete={(id) => {
-                  const selectedResume = resumes.find(
-                    (item) => item.id === id
-                  );
+  
+<ResumeCard
+  resume={resume}
+  onDelete={(id) => {
+    const selectedResume = resumes.find(
+      (item) => item.id === id
+    );
 
-                  if (selectedResume?.isActive) {
-                    setShowActiveResumeWarning(true);
-                    return;
-                  }
+    if (selectedResume?.isActive) {
+      setShowActiveResumeWarning(true);
+      return Promise.resolve();
+    }
 
-                  return deleteResume(id).unwrap();
-                }}
-              />
+    return deleteResume(id).unwrap();
+  }}
+/>
+
             </li>
           ))}
         </ul>
