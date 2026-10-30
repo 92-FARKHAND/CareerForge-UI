@@ -11,25 +11,24 @@ import { useGetProfileQuery } from '@/lib/redux/api/profileApi';
  *
  * If we already know the answer (signed in this tab, or known to be
  * signed out) there's nothing to ask the server. Only a fresh page load
- * with no information does a GET /profile, so a signed-in user who
- * reloads /login still gets sent to /dashboard. Only a confirmed 401
- * counts as "actually a guest" — a 404 (signed in, no profile yet) or any
- * other error still means signed in.
+ * with no information does a GET /profile. A successful response (including
+ * a 404 converted to "no profile yet") still means signed in. A 401 or any
+ * other error means stay on the auth page — never bounce a guest to
+ * /dashboard.
  */
 export function GuestOnly({ children }: { children: ReactNode }) {
   const router = useRouter();
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const isKnownGuest = useAppSelector((state) => state.auth.isKnownGuest);
 
-  const { isLoading, isSuccess, isError, error } = useGetProfileQuery(
+  const { isLoading, isSuccess, isUninitialized, isError } = useGetProfileQuery(
     undefined,
     { skip: isAuthenticated || isKnownGuest },
   );
 
-  const isUnauthorized =
-    isError && !!error && 'status' in error && error.status === 401;
-  const confirmedAuthenticated =
-    isAuthenticated || isSuccess || (isError && !isUnauthorized);
+  // Only a proven session belongs on /dashboard. A 404 is converted to
+  // success (signed in, no profile yet). Network/500 errors are not.
+  const confirmedAuthenticated = isAuthenticated || isSuccess;
 
   useEffect(() => {
     if (confirmedAuthenticated) {
@@ -41,7 +40,7 @@ export function GuestOnly({ children }: { children: ReactNode }) {
     return null;
   }
 
-  if (!isKnownGuest && isLoading) {
+  if (!isKnownGuest && !isError && (isLoading || isUninitialized)) {
     // First load, still asking — avoid flashing the form at a signed-in user.
     return null;
   }

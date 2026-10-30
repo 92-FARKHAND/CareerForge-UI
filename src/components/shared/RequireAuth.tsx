@@ -11,16 +11,12 @@ import { clearUser } from '@/lib/redux/slices/authSlice';
  * Client-side guard for private routes.
  *
  * How it decides (cheapest check first):
- *  - We already know there's no session (logged out, or a failed token
- *    refresh)  -> redirect to /login, no request.
- *  - We just signed in/up in this tab -> render immediately; the session
- *    is proven by the response we just got.
- *  - Otherwise (a hard reload) -> GET /profile. A 401 means the cookie is
- *    really gone; anything else, including a 404 for a user with no
- *    profile yet, means the session is valid.
- *
- * A new account skips the GET entirely: it just proved its session by
- * signing up, and has no profile to look for.
+ *  - Already signed in this tab, or a brand-new account -> render.
+ *  - Known guest (logged out / failed refresh) -> /login, no request.
+ *  - Otherwise (a hard reload) -> GET /profile. Only a successful
+ *    response proves a session (404 is converted to success: signed in,
+ *    no profile yet). A 401, network error, or any other failure is
+ *    treated as logged out — never as a reason to show the dashboard.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -29,8 +25,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const isNewAccount = useAppSelector((state) => state.auth.isNewAccount);
   const isKnownGuest = useAppSelector((state) => state.auth.isKnownGuest);
 
-  const { isLoading, isError, error } = useGetProfileQuery(undefined, {
-    skip: isNewAccount || isKnownGuest,
+  const { isSuccess, isError, error } = useGetProfileQuery(undefined, {
+    skip: isAuthenticated || isNewAccount || isKnownGuest,
   });
 
   const isUnauthorized =
@@ -42,19 +38,18 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     }
   }, [isUnauthorized, dispatch]);
 
+  const sessionConfirmed = isAuthenticated || isNewAccount || isSuccess;
+  const sessionDenied =
+    !sessionConfirmed && (isKnownGuest || isUnauthorized || isError);
+
   useEffect(() => {
-    if (isKnownGuest && !isAuthenticated) {
+    if (sessionDenied) {
       router.replace('/login');
     }
-  }, [isKnownGuest, isAuthenticated, router]);
+  }, [sessionDenied, router]);
 
-  if (isKnownGuest || isUnauthorized) {
-    return null;
-  }
-
-  if (!isAuthenticated && isLoading) {
-    // A reload with no answer from the server yet — don't flash protected
-    // content.
+  if (sessionDenied || !sessionConfirmed) {
+    // Denied, uninitialized, or still loading — never flash protected UI.
     return null;
   }
 
